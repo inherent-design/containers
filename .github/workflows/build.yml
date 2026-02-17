@@ -72,8 +72,8 @@ jobs:
           docker run -d --name smoke \
             -e POSTGRES_PASSWORD=test \
             -e POSTGRES_DB=testdb \
-            -e POSTGRES_INITDB_ARGS="-c shared_preload_libraries=timescaledb" \
-            ${{ env.IMAGE_NAME }}:smoke-test
+            ${{ env.IMAGE_NAME }}:smoke-test \
+            -c shared_preload_libraries=timescaledb
           for i in $(seq 1 30); do
             docker exec smoke pg_isready -U postgres 2>/dev/null && break
             sleep 2

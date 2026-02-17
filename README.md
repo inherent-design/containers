@@ -44,9 +44,9 @@ spec:
 ```bash
 docker run -d \
   -e POSTGRES_PASSWORD=dev \
-  -e POSTGRES_INITDB_ARGS="-c shared_preload_libraries=timescaledb" \
   -p 5432:5432 \
-  ghcr.io/inherent-design/cnpg-timescale:18
+  ghcr.io/inherent-design/cnpg-timescale:18 \
+  -c shared_preload_libraries=timescaledb
 ```
 
 ## Tags
