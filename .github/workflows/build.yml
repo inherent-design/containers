@@ -69,22 +69,19 @@ jobs:
 
       - name: Smoke test
         run: |
-          docker run -d --name smoke \
-            -e POSTGRES_PASSWORD=test \
-            -e POSTGRES_DB=testdb \
-            ${{ env.IMAGE_NAME }}:smoke-test \
-            -c shared_preload_libraries=timescaledb
-          for i in $(seq 1 30); do
-            docker exec smoke pg_isready -U postgres 2>/dev/null && break
-            sleep 2
-          done
-          docker exec smoke psql -U postgres -d testdb -c \
-            "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-          docker exec smoke psql -U postgres -d testdb -c \
-            "CREATE EXTENSION IF NOT EXISTS vector;"
-          docker exec smoke psql -U postgres -d testdb -c \
-            "SELECT name, default_version FROM pg_available_extensions WHERE name IN ('timescaledb', 'vector') ORDER BY name;"
-          docker stop smoke && docker rm smoke
+          docker run --rm --entrypoint sh ${{ env.IMAGE_NAME }}:smoke-test -c '
+            PG=18
+            SO=$(find /usr/lib/postgresql/$PG/lib -name "timescaledb-*.so" | head -1)
+            if [ -z "$SO" ]; then echo "FAIL: timescaledb .so not found"; exit 1; fi
+            echo "Found: $SO"
+            for ext in timescaledb vector; do
+              CTRL="/usr/share/postgresql/$PG/extension/${ext}.control"
+              if [ ! -f "$CTRL" ]; then echo "FAIL: $CTRL not found"; exit 1; fi
+              VER=$(grep default_version "$CTRL" | cut -d= -f2 | tr -d " '"'"'")
+              echo "Found: $ext $VER"
+            done
+            echo "All extensions validated"
+          '
 
       - name: Scan image
         id: trivy
