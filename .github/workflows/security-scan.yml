@@ -12,14 +12,15 @@ jobs:
   scan:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     steps:
-      - uses: aquasecurity/trivy-action@master
+      - id: trivy
+        uses: aquasecurity/trivy-action@0.34.0
         with:
           image-ref: ghcr.io/inherent-design/cnpg-timescale:18
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH
 
-      - uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && steps.trivy.conclusion != 'skipped'
         with:
           sarif_file: trivy-results.sarif

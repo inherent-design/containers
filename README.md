@@ -6,9 +6,9 @@ CloudNativePG images with extensions for inherent.design infrastructure.
 
 | Image | Base | Extensions |
 |-------|------|------------|
-| `ghcr.io/inherent-design/cnpg-timescale:18` | `ghcr.io/cloudnative-pg/postgresql:18` (standard) | TimescaleDB, pgVector, PGAudit |
+| `ghcr.io/inherent-design/cnpg-timescale:18` | `ghcr.io/cloudnative-pg/postgresql:18.1-standard-bookworm` | TimescaleDB, pgVector, PGAudit |
 
-The CNPG `standard` base includes pgVector and PGAudit. This image adds TimescaleDB from the official Timescale apt repository.
+The CNPG `standard` base (Debian bookworm) includes pgVector and PGAudit. This image adds TimescaleDB from the official Timescale apt repository.
 
 ## Usage
 

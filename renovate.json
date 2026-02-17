@@ -8,12 +8,19 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\nARG \\w+=(?<currentValue>.*)"
       ],
-      "versioningTemplate": "loose"
+      "versioningTemplate": "docker"
     }
   ],
   "packageRules": [
     {
+      "matchPackageNames": ["ghcr.io/cloudnative-pg/postgresql"],
+      "matchDatasources": ["docker"],
+      "versionCompatibility": "^(?<version>[^-]+)(?<compatibility>-.*)?$",
+      "versioning": "docker"
+    },
+    {
       "matchPackageNames": ["timescale/timescaledb"],
+      "matchDatasources": ["github-releases"],
       "extractVersion": "^v?(?<version>.*)$"
     }
   ]
