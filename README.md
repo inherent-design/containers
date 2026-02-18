@@ -4,11 +4,11 @@ CloudNativePG images with extensions for inherent.design infrastructure.
 
 ## Images
 
-| Image | Base | Extensions |
-|-------|------|------------|
-| `ghcr.io/inherent-design/cnpg-timescale:18` | `ghcr.io/cloudnative-pg/postgresql:18.1-standard-bookworm` | TimescaleDB, pgVector, PGAudit |
+| Image                                       | Base                                                     | Extensions                     |
+| ------------------------------------------- | -------------------------------------------------------- | ------------------------------ |
+| `ghcr.io/inherent-design/cnpg-timescale:18` | `ghcr.io/cloudnative-pg/postgresql:18.1-system-bookworm` | TimescaleDB, pgVector, PGAudit |
 
-The CNPG `standard` base (Debian bookworm) includes pgVector and PGAudit. This image adds TimescaleDB from the official Timescale apt repository.
+The CNPG `system` base (Debian bookworm) includes pgVector and PGAudit. This image adds TimescaleDB from the official Timescale apt repository.
 
 ## Usage
 
@@ -51,11 +51,11 @@ docker run -d \
 
 ## Tags
 
-| Tag | Description |
-|-----|-------------|
-| `18` | Rolling latest for PostgreSQL 18 |
-| `18-YYYYMMDD` | Weekly scheduled rebuild |
-| `18-<sha>` | Git commit reference |
+| Tag           | Description                      |
+| ------------- | -------------------------------- |
+| `18`          | Rolling latest for PostgreSQL 18 |
+| `18-YYYYMMDD` | Weekly scheduled rebuild         |
+| `18-<sha>`    | Git commit reference             |
 
 ## Build
 

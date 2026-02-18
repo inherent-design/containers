@@ -56,6 +56,9 @@ jobs:
             type=raw,value=${{ env.PG_MAJOR }}
             type=schedule,pattern=${{ env.PG_MAJOR }}-{{date 'YYYYMMDD'}}
             type=sha,prefix=${{ env.PG_MAJOR }}-
+          labels: |
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/README.md
+            io.artifacthub.package.license=Apache-2.0
 
       - id: build-test
         uses: useblacksmith/build-push-action@v2
@@ -129,3 +132,14 @@ jobs:
           echo "- Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PG_MAJOR }}" >> $GITHUB_STEP_SUMMARY
           echo "- Digest: ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "- Platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+
+      - uses: oras-project/setup-oras@v1
+        if: steps.push.outcome == 'success'
+
+      - name: Push Artifact Hub metadata
+        if: steps.push.outcome == 'success'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u ${{ github.actor }} --password-stdin
+          oras push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:artifacthub.io \
+            --config /dev/null:application/vnd.cncf.artifacthub.config.v1+yaml \
+            artifacthub-repo.yml:application/vnd.cncf.artifacthub.repository-metadata.layer.v1.yaml
