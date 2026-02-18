@@ -80,7 +80,11 @@ jobs:
               VER=$(grep default_version "$CTRL" | cut -d= -f2 | tr -d " '"'"'")
               echo "Found: $ext $VER"
             done
-            echo "All extensions validated"
+            for bin in barman-cloud-backup barman-cloud-wal-archive barman-cloud-check-wal-archive barman-cloud-wal-restore barman-cloud-restore; do
+              if ! command -v "$bin" >/dev/null 2>&1; then echo "FAIL: $bin not found"; exit 1; fi
+              echo "Found: $bin"
+            done
+            echo "All extensions and backup tools validated"
           '
 
       - name: Scan image
