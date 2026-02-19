@@ -59,6 +59,7 @@ jobs:
             type=sha,prefix=${{ env.PG_MAJOR }}-
           labels: |
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/cloudnative-pg-timescaledb/README.md
+            io.artifacthub.package.logo-url=https://raw.githubusercontent.com/inherent-design/containers/main/cloudnative-pg-timescaledb/icon.png
             io.artifacthub.package.license=Apache-2.0
             io.artifacthub.package.category=database
             io.artifacthub.package.keywords=postgresql,timescaledb,pgvector,cnpg,cloudnative-pg
