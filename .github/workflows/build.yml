@@ -1,10 +1,10 @@
-name: Build cnpg-timescale
+name: Build cloudnative-pg-timescaledb
 
 on:
   push:
     branches: [main]
     paths:
-      - "cnpg-timescale/**"
+      - "cloudnative-pg-timescaledb/**"
       - ".github/workflows/build.yml"
   schedule:
     - cron: "0 6 * * 1"
@@ -28,7 +28,7 @@ concurrency:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: inherent-design/cnpg-timescale
+  IMAGE_NAME: inherent-design/cloudnative-pg-timescaledb
   PG_MAJOR: "18"
 
 jobs:
@@ -58,18 +58,18 @@ jobs:
             type=schedule,pattern=${{ env.PG_MAJOR }}-{{date 'YYYYMMDD'}}
             type=sha,prefix=${{ env.PG_MAJOR }}-
           labels: |
-            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/cnpg-timescale/README.md
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/cloudnative-pg-timescaledb/README.md
             io.artifacthub.package.license=Apache-2.0
             io.artifacthub.package.category=database
             io.artifacthub.package.keywords=postgresql,timescaledb,pgvector,cnpg,cloudnative-pg
             io.artifacthub.package.maintainers=[{"name":"inherent-design","email":"mannie@inherent.design"}]
             org.opencontainers.image.vendor=inherent.design
-            org.opencontainers.image.documentation=https://github.com/inherent-design/containers/tree/main/cnpg-timescale
+            org.opencontainers.image.documentation=https://github.com/inherent-design/containers/tree/main/cloudnative-pg-timescaledb
 
       - id: build-test
         uses: useblacksmith/build-push-action@v2
         with:
-          context: ./cnpg-timescale
+          context: ./cloudnative-pg-timescaledb
           platforms: linux/amd64
           load: true
           tags: ${{ env.IMAGE_NAME }}:smoke-test
@@ -114,7 +114,7 @@ jobs:
         uses: useblacksmith/build-push-action@v2
         if: github.ref == 'refs/heads/main' || github.event.inputs.force_push == 'true'
         with:
-          context: ./cnpg-timescale
+          context: ./cloudnative-pg-timescaledb
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
@@ -130,6 +130,13 @@ jobs:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+      - uses: sigstore/cosign-installer@v3
+        if: steps.push.outcome == 'success'
+
+      - name: Sign image
+        if: steps.push.outcome == 'success'
+        run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
 
       - name: Summary
         if: steps.push.outcome == 'success'

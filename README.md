@@ -6,7 +6,7 @@ Container images for inherent.design infrastructure.
 
 | Directory | Image | Description |
 |---|---|---|
-| [`cnpg-timescale`](cnpg-timescale/) | `ghcr.io/inherent-design/cnpg-timescale` | CloudNativePG PostgreSQL with TimescaleDB, pgVector, PGAudit |
+| [`cloudnative-pg-timescaledb`](cloudnative-pg-timescaledb/) | `ghcr.io/inherent-design/cloudnative-pg-timescaledb` | CloudNativePG PostgreSQL with TimescaleDB, pgVector, PGAudit |
 
 Each directory contains a Dockerfile and README with image-specific documentation, usage examples, and version details.
 
@@ -14,7 +14,7 @@ Each directory contains a Dockerfile and README with image-specific documentatio
 
 | Workflow | Trigger | Schedule | Purpose |
 |---|---|---|---|
-| Build | Push to main (path-filtered) | Monday 06:00 UTC | Build, smoke test, Trivy scan, push to GHCR, attestation, Artifact Hub metadata |
+| Build | Push to main (path-filtered) | Monday 06:00 UTC | Build, smoke test, Trivy scan, push to GHCR, attestation, cosign signing, Artifact Hub metadata |
 | Security Scan | Weekly | Wednesday 08:00 UTC | Trivy scan of published images, upload SARIF to GitHub Security |
 | Cleanup | Weekly | Sunday 03:00 UTC | Prune untagged and old GHCR images, keep 10 most recent tagged |
 

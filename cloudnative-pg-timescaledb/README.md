@@ -1,11 +1,11 @@
-# cnpg-timescale
+# cloudnative-pg-timescaledb
 
 CloudNativePG PostgreSQL image with TimescaleDB, pgVector, and PGAudit.
 
 ## Image
 
 ```
-ghcr.io/inherent-design/cnpg-timescale
+ghcr.io/inherent-design/cloudnative-pg-timescaledb
 ```
 
 Base: `ghcr.io/cloudnative-pg/postgresql:18.1-system-bookworm`
@@ -44,7 +44,7 @@ metadata:
   name: pg-main
 spec:
   instances: 1
-  imageName: ghcr.io/inherent-design/cnpg-timescale:18
+  imageName: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
 
   postgresql:
     parameters:
@@ -68,7 +68,7 @@ spec:
 docker run -d \
   -e POSTGRES_PASSWORD=dev \
   -p 5432:5432 \
-  ghcr.io/inherent-design/cnpg-timescale:18 \
+  ghcr.io/inherent-design/cloudnative-pg-timescaledb:18 \
   -c shared_preload_libraries=timescaledb
 ```
 
@@ -78,6 +78,6 @@ Starts from the CNPG system base, switches to root to install TimescaleDB from t
 
 ## Build
 
-Images are built automatically on push to `main` (when files in `cnpg-timescale/` change) and on a weekly schedule (Monday 06:00 UTC). Multi-arch: `linux/amd64`, `linux/arm64`.
+Images are built automatically on push to `main` (when files in `cloudnative-pg-timescaledb/` change) and on a weekly schedule (Monday 06:00 UTC). Multi-arch: `linux/amd64`, `linux/arm64`.
 
-Build includes a single-platform smoke test before the multi-arch push. The smoke test validates that TimescaleDB .so files, extension control files (timescaledb, vector), and all Barman backup binaries are present.
+Build includes a single-platform smoke test before the multi-arch push. The smoke test validates that TimescaleDB .so files, extension control files (timescaledb, vector), and all Barman backup binaries are present. Images are signed with cosign (keyless, via GitHub OIDC).

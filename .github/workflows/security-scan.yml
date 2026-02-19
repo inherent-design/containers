@@ -16,7 +16,7 @@ jobs:
       - id: trivy
         uses: aquasecurity/trivy-action@0.34.0
         with:
-          image-ref: ghcr.io/inherent-design/cnpg-timescale:18
+          image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: sarif
           output: trivy-results.sarif
           severity: CRITICAL,HIGH

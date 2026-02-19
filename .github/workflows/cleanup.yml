@@ -15,7 +15,7 @@ jobs:
     steps:
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:
-          package: cnpg-timescale
+          package: cloudnative-pg-timescaledb
           delete-untagged: true
           delete-ghost-images: true
           delete-partial-images: true
