@@ -1,65 +1,26 @@
 # containers
 
-CloudNativePG images with extensions for inherent.design infrastructure.
+Container images for inherent.design infrastructure.
 
 ## Images
 
-| Image                                       | Base                                                     | Extensions                     |
-| ------------------------------------------- | -------------------------------------------------------- | ------------------------------ |
-| `ghcr.io/inherent-design/cnpg-timescale:18` | `ghcr.io/cloudnative-pg/postgresql:18.1-system-bookworm` | TimescaleDB, pgVector, PGAudit |
+| Directory | Image | Description |
+|---|---|---|
+| [`cnpg-timescale`](cnpg-timescale/) | `ghcr.io/inherent-design/cnpg-timescale` | CloudNativePG PostgreSQL with TimescaleDB, pgVector, PGAudit |
 
-The CNPG `system` base (Debian bookworm) includes pgVector and PGAudit. This image adds TimescaleDB from the official Timescale apt repository.
+Each directory contains a Dockerfile and README with image-specific documentation, usage examples, and version details.
 
-## Usage
+## Workflows
 
-### CloudNativePG Cluster
+| Workflow | Trigger | Schedule | Purpose |
+|---|---|---|---|
+| Build | Push to main (path-filtered) | Monday 06:00 UTC | Build, smoke test, Trivy scan, push to GHCR, attestation, Artifact Hub metadata |
+| Security Scan | Weekly | Wednesday 08:00 UTC | Trivy scan of published images, upload SARIF to GitHub Security |
+| Cleanup | Weekly | Sunday 03:00 UTC | Prune untagged and old GHCR images, keep 10 most recent tagged |
 
-```yaml
-apiVersion: postgresql.cnpg.io/v1
-kind: Cluster
-metadata:
-  name: pg-main
-spec:
-  instances: 1
-  imageName: ghcr.io/inherent-design/cnpg-timescale:18
+## Dependency Management
 
-  postgresql:
-    parameters:
-      shared_preload_libraries: timescaledb
-
-  bootstrap:
-    initdb:
-      database: app
-      owner: app
-      postInitSQL:
-        - "CREATE EXTENSION IF NOT EXISTS timescaledb;"
-        - "CREATE EXTENSION IF NOT EXISTS vector;"
-
-  storage:
-    size: 50Gi
-```
-
-### Docker (local development)
-
-```bash
-docker run -d \
-  -e POSTGRES_PASSWORD=dev \
-  -p 5432:5432 \
-  ghcr.io/inherent-design/cnpg-timescale:18 \
-  -c shared_preload_libraries=timescaledb
-```
-
-## Tags
-
-| Tag           | Description                      |
-| ------------- | -------------------------------- |
-| `18`          | Rolling latest for PostgreSQL 18 |
-| `18-YYYYMMDD` | Weekly scheduled rebuild         |
-| `18-<sha>`    | Git commit reference             |
-
-## Build
-
-Images are built automatically on push to `main` and on a weekly schedule (Monday 06:00 UTC). Multi-arch: `linux/amd64`, `linux/arm64`.
+Renovate tracks base image tags and extension versions via regex custom managers. Updates are opened as PRs against `main`.
 
 ## License
 

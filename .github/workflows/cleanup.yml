@@ -11,6 +11,7 @@ permissions:
 jobs:
   cleanup:
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
     steps:
       - uses: dataaxiom/ghcr-cleanup-action@v1
         with:

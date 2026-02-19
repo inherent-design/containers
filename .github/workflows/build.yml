@@ -1,12 +1,11 @@
-name: Build
+name: Build cnpg-timescale
 
 on:
   push:
     branches: [main]
     paths:
-      - "Dockerfile"
+      - "cnpg-timescale/**"
       - ".github/workflows/build.yml"
-      - "renovate.json"
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
@@ -35,6 +34,7 @@ env:
 jobs:
   build:
     runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
 
@@ -53,17 +53,23 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest
             type=raw,value=${{ env.PG_MAJOR }}
             type=schedule,pattern=${{ env.PG_MAJOR }}-{{date 'YYYYMMDD'}}
             type=sha,prefix=${{ env.PG_MAJOR }}-
           labels: |
-            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/README.md
+            io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/cnpg-timescale/README.md
             io.artifacthub.package.license=Apache-2.0
+            io.artifacthub.package.category=database
+            io.artifacthub.package.keywords=postgresql,timescaledb,pgvector,cnpg,cloudnative-pg
+            io.artifacthub.package.maintainers=[{"name":"inherent-design","email":"mannie@inherent.design"}]
+            org.opencontainers.image.vendor=inherent.design
+            org.opencontainers.image.documentation=https://github.com/inherent-design/containers/tree/main/cnpg-timescale
 
       - id: build-test
         uses: useblacksmith/build-push-action@v2
         with:
-          context: .
+          context: ./cnpg-timescale
           platforms: linux/amd64
           load: true
           tags: ${{ env.IMAGE_NAME }}:smoke-test
@@ -108,7 +114,7 @@ jobs:
         uses: useblacksmith/build-push-action@v2
         if: github.ref == 'refs/heads/main' || github.event.inputs.force_push == 'true'
         with:
-          context: .
+          context: ./cnpg-timescale
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
