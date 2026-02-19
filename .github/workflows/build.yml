@@ -64,6 +64,7 @@ jobs:
             io.artifacthub.package.category=database
             io.artifacthub.package.keywords=postgresql,timescaledb,pgvector,cnpg,cloudnative-pg
             io.artifacthub.package.maintainers=[{"name":"inherent-design","email":"mannie@inherent.design"}]
+            org.opencontainers.image.title=cloudnative-pg-timescaledb
             org.opencontainers.image.vendor=inherent.design
             org.opencontainers.image.documentation=https://github.com/inherent-design/containers/tree/main/cloudnative-pg-timescaledb
 
