@@ -4,7 +4,7 @@ ARG CNPG_TAG=18.1-system-bookworm
 FROM ghcr.io/cloudnative-pg/postgresql:${CNPG_TAG}
 
 # renovate: datasource=github-releases depName=timescale/timescaledb
-ARG TIMESCALEDB_VERSION=2.25.1
+ARG TIMESCALEDB_VERSION=2.25.2
 ARG PG_MAJOR=18
 
 USER root
