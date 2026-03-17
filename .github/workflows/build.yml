@@ -100,7 +100,7 @@ jobs:
 
       - name: Scan image
         id: trivy
-        uses: aquasecurity/trivy-action@0.34.0
+        uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: sarif
