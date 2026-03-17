@@ -20,6 +20,7 @@ permissions:
   packages: write
   security-events: write
   attestations: write
+  artifact-metadata: write
   id-token: write
 
 concurrency:
@@ -133,7 +134,7 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      - uses: sigstore/cosign-installer@v3
+      - uses: sigstore/cosign-installer@v4
         if: steps.push.outcome == 'success'
 
       - name: Sign image
