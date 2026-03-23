@@ -134,7 +134,7 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      - uses: sigstore/cosign-installer@v4
+      - uses: sigstore/cosign-installer@v4.1.0
         if: steps.push.outcome == 'success'
 
       - name: Sign image
