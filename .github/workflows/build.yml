@@ -149,7 +149,7 @@ jobs:
           echo "- Digest: ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "- Platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
 
-      - uses: oras-project/setup-oras@v1
+      - uses: oras-project/setup-oras@v2
         if: steps.push.outcome == 'success'
 
       - name: Push Artifact Hub metadata
