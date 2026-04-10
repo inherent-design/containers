@@ -1,0 +1,62 @@
+name: Renovate Auto Approve
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - labeled
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  auto-approve:
+    if: github.event.pull_request.user.login == 'renovate[bot]'
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 10
+    steps:
+      - uses: actions/github-script@v8
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const labels = new Set(pr.labels.map((label) => label.name));
+            const eligible =
+              !pr.draft &&
+              labels.has('safe-automerge') &&
+              !labels.has('major') &&
+              !labels.has('needs-review');
+
+            await core.summary
+              .addHeading('Renovate auto-approval')
+              .addRaw(`PR #${pr.number} eligible: ${eligible ? 'yes' : 'no'}`)
+              .write();
+
+            if (!eligible) {
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            const alreadyApproved = reviews.some(
+              (review) => review.user?.login === 'github-actions[bot]' && review.state === 'APPROVED'
+            );
+
+            if (alreadyApproved) {
+              return;
+            }
+
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              event: 'APPROVE',
+              body: 'Approving safe Renovate update after automated policy checks.',
+            });

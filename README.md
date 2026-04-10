@@ -16,13 +16,18 @@ Each directory contains a Dockerfile and README with image-specific documentatio
 
 | Workflow | Trigger | Schedule | Purpose |
 |---|---|---|---|
-| Build | Push to main (path-filtered) | Monday 06:00 UTC | Build, smoke test, Trivy scan, push to GHCR, attestation, cosign signing, Artifact Hub metadata |
+| Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Workflow linting, image build, smoke test, Trivy scan, and publishing on main |
+| Renovate Auto Approve | Renovate pull_request_target events | — | Auto-approve safe Renovate patch/minor/digest updates after policy checks |
 | Security Scan | Weekly | Wednesday 08:00 UTC | Trivy scan of published images, upload SARIF to GitHub Security |
 | Cleanup | Weekly | Sunday 03:00 UTC | Prune untagged and old GHCR images, keep 10 most recent tagged |
 
 ## Dependency Management
 
-Renovate tracks base image tags and extension versions via regex custom managers. Updates are opened as PRs against `main`.
+Renovate tracks base image tags and extension versions via regex custom managers.
+
+- Patch, minor, digest, and pin updates are labeled `safe-automerge` and are intended to auto-merge after checks pass.
+- Major updates are opened as draft PRs with `needs-review`.
+- Failure surfacing stays in GitHub Actions and GitHub Security only; no issue automation is used for scan failures.
 
 ## License
 

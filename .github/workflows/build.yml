@@ -3,9 +3,8 @@ name: Build cloudnative-pg-timescaledb
 on:
   push:
     branches: [main]
-    paths:
-      - "cloudnative-pg-timescaledb/**"
-      - ".github/workflows/build.yml"
+  pull_request:
+    branches: [main]
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
@@ -39,6 +38,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - id: changes
+        if: github.event_name == 'push' || github.event_name == 'pull_request'
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            relevant:
+              - "cloudnative-pg-timescaledb/**"
+              - ".github/workflows/**"
+              - ".github/actionlint.yaml"
+              - "artifacthub-repo.yml"
+              - "renovate.json"
+
       - uses: docker/setup-qemu-action@v4
 
       - uses: useblacksmith/setup-docker-builder@v1
@@ -70,6 +81,7 @@ jobs:
             org.opencontainers.image.documentation=https://github.com/inherent-design/containers/tree/main/cloudnative-pg-timescaledb
 
       - id: build-test
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         uses: useblacksmith/build-push-action@v2
         with:
           context: ./cloudnative-pg-timescaledb
@@ -80,6 +92,7 @@ jobs:
             PG_MAJOR=${{ env.PG_MAJOR }}
 
       - name: Smoke test
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         run: |
           docker run --rm --entrypoint sh ${{ env.IMAGE_NAME }}:smoke-test -c '
             PG=18
@@ -101,11 +114,14 @@ jobs:
 
       - name: Scan image
         id: trivy
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: sarif
           output: trivy-results.sarif
+          exit-code: "1"
           severity: CRITICAL,HIGH
 
       - uses: github/codeql-action/upload-sarif@v4
@@ -113,9 +129,81 @@ jobs:
         with:
           sarif_file: trivy-results.sarif
 
+      - name: Validation summary
+        if: always()
+        env:
+          BUILD_TEST_OUTCOME: ${{ steps.build-test.outcome }}
+          TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+          RELEVANT_CHANGES: ${{ steps.changes.outputs.relevant }}
+        run: |
+          set -euo pipefail
+
+          CNPG_TAG=$(sed -n 's/^ARG CNPG_TAG=//p' cloudnative-pg-timescaledb/Dockerfile)
+          REQUESTED_TS=$(sed -n 's/^ARG TIMESCALEDB_VERSION=//p' cloudnative-pg-timescaledb/Dockerfile)
+
+          {
+            echo "## Validation Summary"
+            echo "- Requested CNPG base tag: \`${CNPG_TAG}\`"
+            echo "- Requested TimescaleDB version: \`${REQUESTED_TS}\`"
+            echo "- Relevant changes detected: \`${RELEVANT_CHANGES:-true}\`"
+            echo "- Smoke image build: \`${BUILD_TEST_OUTCOME}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "${BUILD_TEST_OUTCOME}" = "success" ]; then
+            docker run --rm --entrypoint sh "${IMAGE_NAME}:smoke-test" -c '
+              pkg="timescaledb-2-postgresql-18"
+              printf "resolved_ts=%s\n" "$(dpkg-query -W -f='\''${Version}'\'' "$pkg")"
+              printf "default_ts=%s\n" "$(awk -F\"'\''\" "/default_version/ {print \$2}" /usr/share/postgresql/18/extension/timescaledb.control)"
+              for ext in vector pgaudit; do
+                if [ -f "/usr/share/postgresql/18/extension/${ext}.control" ]; then
+                  printf "%s_status=present\n" "$ext"
+                else
+                  printf "%s_status=missing\n" "$ext"
+                fi
+              done
+              missing=""
+              for bin in barman-cloud-backup barman-cloud-wal-archive barman-cloud-check-wal-archive barman-cloud-wal-restore barman-cloud-restore; do
+                if ! command -v "$bin" >/dev/null 2>&1; then
+                  missing="${missing}${bin} "
+                fi
+              done
+              if [ -n "$missing" ]; then
+                printf "barman_status=missing:%s\n" "$missing"
+              else
+                printf "barman_status=present\n"
+              fi
+            ' > /tmp/image-metadata
+
+            # shellcheck disable=SC1091
+            . /tmp/image-metadata
+            {
+              echo "- Resolved TimescaleDB package: \`${resolved_ts}\`"
+              echo "- TimescaleDB extension default: \`${default_ts}\`"
+              echo "- pgVector control file: \`${vector_status}\`"
+              echo "- PGAudit control file: \`${pgaudit_status}\`"
+              echo "- Barman toolchain: \`${barman_status}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          if [ -f trivy-results.sarif ]; then
+            FINDING_COUNT=$(jq '[.runs[].results[]?] | length' trivy-results.sarif)
+            {
+              echo "- Trivy scan status: \`${TRIVY_OUTCOME}\`"
+              echo "- Trivy findings: \`${FINDING_COUNT}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Trivy scan status: \`not-run\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail on Trivy findings
+        if: always() && steps.trivy.outcome == 'failure'
+        run: |
+          echo "Trivy detected HIGH/CRITICAL findings in the smoke-test image." >&2
+          exit 1
+
       - id: push
         uses: useblacksmith/build-push-action@v2
-        if: github.ref == 'refs/heads/main' || github.event.inputs.force_push == 'true'
+        if: (github.ref == 'refs/heads/main' || github.event.inputs.force_push == 'true') && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true')
         with:
           context: ./cloudnative-pg-timescaledb
           platforms: linux/amd64,linux/arm64
@@ -141,13 +229,20 @@ jobs:
         if: steps.push.outcome == 'success'
         run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.push.outputs.digest }}
 
-      - name: Summary
+      - name: Publish summary
         if: steps.push.outcome == 'success'
+        env:
+          PUSHED_TAGS: ${{ steps.meta.outputs.tags }}
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "- Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.PG_MAJOR }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Digest: ${{ steps.push.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Platforms: linux/amd64, linux/arm64" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "## Published Image"
+            echo "- Digest: ${{ steps.push.outputs.digest }}"
+            echo "- Platforms: linux/amd64, linux/arm64"
+            echo "- Tags:"
+            while IFS= read -r tag; do
+              [ -n "$tag" ] && echo "  - \`$tag\`"
+            done <<< "${PUSHED_TAGS}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - uses: oras-project/setup-oras@v2
         if: steps.push.outcome == 'success'

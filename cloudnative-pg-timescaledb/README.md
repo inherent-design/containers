@@ -8,21 +8,17 @@ CloudNativePG PostgreSQL image with TimescaleDB, pgVector, and PGAudit.
 ghcr.io/inherent-design/cloudnative-pg-timescaledb
 ```
 
-Base: `ghcr.io/cloudnative-pg/postgresql:18.1-system-bookworm`
-
 The CNPG `system` base (Debian bookworm) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository.
 
 ## Versions
 
-| Component | Version | Source |
-|---|---|---|
-| PostgreSQL | 18.1 | CNPG base image |
-| TimescaleDB | 2.25.1 | Timescale apt repository |
-| pgVector | included | CNPG system image |
-| PGAudit | included | CNPG system image |
-| Barman Cloud | included | CNPG system image |
+Exact version numbers are not maintained manually in this README.
 
-Versions are managed by Renovate. The CNPG base tag and TimescaleDB version are tracked as separate dependencies and updated via automated PRs.
+- The intended CNPG base tag and TimescaleDB target version live in [Dockerfile](Dockerfile).
+- The resolved installed package versions are reported in the GitHub Actions build summary for each run.
+- The published image remains the source of truth for the runtime package versions that were actually shipped.
+
+Versions are managed by Renovate. The CNPG base tag and TimescaleDB target version are tracked independently and updated via automated PRs.
 
 ## Tags
 
@@ -74,10 +70,16 @@ docker run -d \
 
 ## Dockerfile
 
-Starts from the CNPG system base, switches to root to install TimescaleDB from the official Timescale apt repository, then drops back to UID 26 (the postgres user in CNPG images). `PG_MAJOR` and `TIMESCALEDB_VERSION` build args are tracked by Renovate for automated version bumps.
+Starts from the CNPG system base, switches to root to install TimescaleDB from the official Timescale apt repository, then drops back to UID 26 (the postgres user in CNPG images). `PG_MAJOR` and `TIMESCALEDB_VERSION` build args are tracked by Renovate for automated version bumps, and the Dockerfile now fails if the requested TimescaleDB version is not available in the apt repository.
 
 ## Build
 
-Images are built automatically on push to `main` (when files in `cloudnative-pg-timescaledb/` change) and on a weekly schedule (Monday 06:00 UTC). Multi-arch: `linux/amd64`, `linux/arm64`.
+Images are validated on pull requests to `main`, published on push to `main`, and rebuilt on a weekly schedule (Monday 06:00 UTC). Multi-arch: `linux/amd64`, `linux/arm64`.
 
-Build includes a single-platform smoke test before the multi-arch push. The smoke test validates that TimescaleDB .so files, extension control files (timescaledb, vector), and all Barman backup binaries are present. Images are signed with cosign (keyless, via GitHub OIDC).
+The build includes:
+
+- workflow linting with `actionlint`
+- a single-platform smoke-test image build
+- validation of TimescaleDB, pgVector, PGAudit, and the Barman toolchain
+- Trivy scanning with SARIF upload and Actions summaries
+- multi-arch publish, attestation, signing, and Artifact Hub metadata push on `main`
