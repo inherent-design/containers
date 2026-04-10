@@ -13,34 +13,45 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
-      - id: trivy
+      - id: trivy_gate
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
-          format: sarif
-          output: trivy-results.sarif
+          format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           scanners: vuln
 
+      - id: trivy_report
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"
+          ignore-unfixed: true
+          scanners: vuln
+
       - uses: github/codeql-action/upload-sarif@v4
-        if: always() && steps.trivy.conclusion != 'skipped'
+        if: always() && steps.trivy_report.conclusion != 'skipped'
         with:
           sarif_file: trivy-results.sarif
 
       - name: Security summary
         if: always()
         env:
-          TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+          TRIVY_GATE_OUTCOME: ${{ steps.trivy_gate.outcome }}
+          TRIVY_REPORT_OUTCOME: ${{ steps.trivy_report.outcome }}
         run: |
           set -euo pipefail
 
           {
             echo "## Security Scan Summary"
             echo "- Image: \`ghcr.io/inherent-design/cloudnative-pg-timescaledb:18\`"
-            echo "- Trivy scan status: \`${TRIVY_OUTCOME}\`"
+            echo "- Trivy gate status: \`${TRIVY_GATE_OUTCOME}\`"
+            echo "- Trivy SARIF status: \`${TRIVY_REPORT_OUTCOME}\`"
           } >> "$GITHUB_STEP_SUMMARY"
           if [ -f trivy-results.sarif ]; then
             FINDING_COUNT=$(jq '[.runs[].results[]?] | length' trivy-results.sarif)
@@ -48,7 +59,7 @@ jobs:
           fi
 
       - name: Fail on Trivy findings
-        if: always() && steps.trivy.outcome == 'failure'
+        if: always() && steps.trivy_gate.outcome == 'failure'
         run: |
           echo "Trivy detected HIGH/CRITICAL findings in the published image." >&2
           exit 1
