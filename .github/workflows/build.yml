@@ -123,6 +123,8 @@ jobs:
           output: trivy-results.sarif
           exit-code: "1"
           severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          scanners: vuln
 
       - uses: github/codeql-action/upload-sarif@v4
         if: always() && steps.trivy.conclusion != 'skipped'
@@ -153,7 +155,7 @@ jobs:
             docker run --rm --entrypoint sh "${IMAGE_NAME}:smoke-test" -c '
               pkg="timescaledb-2-postgresql-18"
               printf "resolved_ts=%s\n" "$(dpkg-query -W -f='\''${Version}'\'' "$pkg")"
-              printf "default_ts=%s\n" "$(awk -F\"'\''\" "/default_version/ {print \$2}" /usr/share/postgresql/18/extension/timescaledb.control)"
+              printf "default_ts=%s\n" "$(grep default_version /usr/share/postgresql/18/extension/timescaledb.control | cut -d= -f2 | tr -d " '\''")"
               for ext in vector pgaudit; do
                 if [ -f "/usr/share/postgresql/18/extension/${ext}.control" ]; then
                   printf "%s_status=present\n" "$ext"

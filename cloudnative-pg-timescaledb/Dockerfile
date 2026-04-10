@@ -25,6 +25,8 @@ RUN apt-get update \
          exit 1; \
        fi \
     && apt-get install -y --no-install-recommends \
+       openssl \
+       libssl3 \
        "${TS_PACKAGE}=${TS_PACKAGE_VERSION}" \
     && apt-get purge -y curl \
     && apt-get autoremove -y \
