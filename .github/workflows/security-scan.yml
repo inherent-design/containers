@@ -14,14 +14,39 @@ jobs:
     timeout-minutes: 15
     steps:
       - id: trivy
+        continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: sarif
           output: trivy-results.sarif
+          exit-code: "1"
           severity: CRITICAL,HIGH
 
       - uses: github/codeql-action/upload-sarif@v4
         if: always() && steps.trivy.conclusion != 'skipped'
         with:
           sarif_file: trivy-results.sarif
+
+      - name: Security summary
+        if: always()
+        env:
+          TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo "## Security Scan Summary"
+            echo "- Image: \`ghcr.io/inherent-design/cloudnative-pg-timescaledb:18\`"
+            echo "- Trivy scan status: \`${TRIVY_OUTCOME}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -f trivy-results.sarif ]; then
+            FINDING_COUNT=$(jq '[.runs[].results[]?] | length' trivy-results.sarif)
+            echo "- Trivy findings: \`${FINDING_COUNT}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Fail on Trivy findings
+        if: always() && steps.trivy.outcome == 'failure'
+        run: |
+          echo "Trivy detected HIGH/CRITICAL findings in the published image." >&2
+          exit 1

@@ -17,8 +17,15 @@ RUN apt-get update \
     && curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey \
        | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescaledb.gpg \
     && apt-get update \
+    && TS_PACKAGE="timescaledb-2-postgresql-${PG_MAJOR}" \
+    && TS_PACKAGE_VERSION="$(apt-cache madison "${TS_PACKAGE}" | awk -v want="${TIMESCALEDB_VERSION}" '$3 ~ ("^" want "([+~.-]|$)") { print $3; exit }')" \
+    && if [ -z "${TS_PACKAGE_VERSION}" ]; then \
+         echo "Requested ${TS_PACKAGE} version ${TIMESCALEDB_VERSION} is not available" >&2; \
+         apt-cache madison "${TS_PACKAGE}" >&2; \
+         exit 1; \
+       fi \
     && apt-get install -y --no-install-recommends \
-       "timescaledb-2-postgresql-${PG_MAJOR}" \
+       "${TS_PACKAGE}=${TS_PACKAGE_VERSION}" \
     && apt-get purge -y curl \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
