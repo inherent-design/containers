@@ -112,22 +112,33 @@ jobs:
             echo "All extensions and backup tools validated"
           '
 
-      - name: Scan image
-        id: trivy
+      - name: Scan image gate
+        id: trivy_gate
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         continue-on-error: true
         uses: aquasecurity/trivy-action@0.35.0
         with:
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
-          format: sarif
-          output: trivy-results.sarif
+          format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           scanners: vuln
 
+      - name: Generate Trivy SARIF
+        id: trivy_report
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        uses: aquasecurity/trivy-action@0.35.0
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}:smoke-test
+          format: sarif
+          output: trivy-results.sarif
+          exit-code: "0"
+          ignore-unfixed: true
+          scanners: vuln
+
       - uses: github/codeql-action/upload-sarif@v4
-        if: always() && steps.trivy.conclusion != 'skipped'
+        if: always() && steps.trivy_report.conclusion != 'skipped'
         with:
           sarif_file: trivy-results.sarif
 
@@ -135,7 +146,8 @@ jobs:
         if: always()
         env:
           BUILD_TEST_OUTCOME: ${{ steps.build-test.outcome }}
-          TRIVY_OUTCOME: ${{ steps.trivy.outcome }}
+          TRIVY_GATE_OUTCOME: ${{ steps.trivy_gate.outcome }}
+          TRIVY_REPORT_OUTCOME: ${{ steps.trivy_report.outcome }}
           RELEVANT_CHANGES: ${{ steps.changes.outputs.relevant }}
         run: |
           set -euo pipefail
@@ -190,15 +202,19 @@ jobs:
           if [ -f trivy-results.sarif ]; then
             FINDING_COUNT=$(jq '[.runs[].results[]?] | length' trivy-results.sarif)
             {
-              echo "- Trivy scan status: \`${TRIVY_OUTCOME}\`"
+              echo "- Trivy gate status: \`${TRIVY_GATE_OUTCOME}\`"
+              echo "- Trivy SARIF status: \`${TRIVY_REPORT_OUTCOME}\`"
               echo "- Trivy findings: \`${FINDING_COUNT}\`"
             } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Trivy scan status: \`not-run\`" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "- Trivy gate status: \`${TRIVY_GATE_OUTCOME:-not-run}\`"
+              echo "- Trivy SARIF status: \`${TRIVY_REPORT_OUTCOME:-not-run}\`"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Fail on Trivy findings
-        if: always() && steps.trivy.outcome == 'failure'
+        if: always() && steps.trivy_gate.outcome == 'failure'
         run: |
           echo "Trivy detected HIGH/CRITICAL findings in the smoke-test image." >&2
           exit 1
