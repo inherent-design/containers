@@ -15,7 +15,7 @@ jobs:
     steps:
       - id: trivy_gate
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: table
@@ -25,7 +25,7 @@ jobs:
           scanners: vuln
 
       - id: trivy_report
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: sarif
