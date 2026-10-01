@@ -7,6 +7,9 @@ FROM ghcr.io/cloudnative-pg/postgresql:${CNPG_TAG}
 ARG TIMESCALEDB_VERSION=2.30.2
 ARG PG_MAJOR=18
 
+# renovate: datasource=pypi depName=barman
+ARG BARMAN_VERSION=3.20.1
+
 USER root
 
 RUN apt-get update \
@@ -28,6 +31,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        "${TS_PACKAGE}=${TS_PACKAGE_VERSION}" \
        "timescaledb-2-loader-postgresql-${PG_MAJOR}=${TS_PACKAGE_VERSION}" \
+    && python3 -m pip install --no-cache-dir \
+       "barman[cloud,azure,snappy,google,zstandard,lz4]==${BARMAN_VERSION}" \
+    && python3 -m pip check \
     && apt-get purge -y curl \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*

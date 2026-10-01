@@ -10,6 +10,29 @@ for bin in barman-cloud-backup barman-cloud-wal-archive barman-cloud-check-wal-a
     "$bin" --version
 done
 
+# Exercise CNPG's complete/partial WAL collision without cloud credentials.
+python3 - <<'PY'
+from unittest.mock import patch
+from barman.clients import cloud_walrestore
+
+wal = "000000010000000000000001"
+prefix = "fixture/cluster/wals/0000000100000000/"
+for suffix in ("", ".zst"):
+    complete = prefix + wal + suffix
+    partial = prefix + wal + ".partial" + suffix
+    for listing in ([partial, complete], [complete, partial]):
+        with patch("barman.clients.cloud_walrestore.get_cloud_interface") as provider:
+            cloud = provider.return_value
+            cloud.path = "fixture"
+            cloud.list_bucket.return_value = listing
+            # A serial restore must also work when no spool directory is writable.
+            with patch("barman.cloud.os.makedirs", side_effect=PermissionError):
+                cloud_walrestore.main(["s3://fixture", "cluster", wal, "/tmp/restored-wal"])
+            assert cloud.download_file.call_count == 1
+            assert cloud.download_file.call_args.args[0] == complete
+print("Barman prefers complete WAL files without requiring a spool directory")
+PY
+
 work=$(mktemp -d)
 cleanup() {
     pg_ctl -D "$work/data" -m immediate stop >/dev/null 2>&1 || true

@@ -8,7 +8,7 @@ CloudNativePG PostgreSQL image with TimescaleDB, pgVector, and PGAudit.
 ghcr.io/inherent-design/cloudnative-pg-timescaledb
 ```
 
-The CNPG `system` base (Debian Trixie) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository.
+The CNPG `system` base (Debian Trixie) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository and updates Barman with the same cloud-provider extras as the upstream base. Barman is tracked explicitly because base-image rebuilds can lag backup security fixes.
 
 The upstream `system` tier is deprecated. It is retained here for existing clusters using `spec.backup.barmanObjectStore`. Migration to the `standard` tier requires the Barman Cloud plugin and a validated backup/restore migration; removing the bundled backup commands from the rolling `18` tag would break those clusters.
 
@@ -76,7 +76,7 @@ docker run --rm -i --entrypoint sh \
 
 ## Dockerfile
 
-Starts from the CNPG system base, refreshes inherited OS packages, installs TimescaleDB and its loader at the same exact package version, then drops back to UID 26 (the postgres user in CNPG images). Renovate tracks `CNPG_TAG` and `TIMESCALEDB_VERSION`; `PG_MAJOR` stays at 18. The build fails if either requested package version is unavailable.
+Starts from the CNPG system base, refreshes inherited OS packages, installs TimescaleDB and its loader at the same exact package version, then drops back to UID 26 (the postgres user in CNPG images). Renovate tracks `CNPG_TAG`, `TIMESCALEDB_VERSION` and `BARMAN_VERSION`; `PG_MAJOR` stays at 18. The build fails if either requested package version is unavailable.
 
 ## Build
 
@@ -87,7 +87,7 @@ The build includes:
 - workflow linting with `actionlint`
 - fresh base resolution and uncached package installation on every build
 - amd64 and arm64 image builds and PostgreSQL startup tests
-- SQL checks for TimescaleDB hypertables, pgVector, and PGAudit, plus execution of all five Barman commands
+- SQL checks for TimescaleDB hypertables, pgVector, and PGAudit, plus execution of all five Barman commands and complete-versus-partial WAL restore regression checks
 - Trivy scanning of both architectures, blocking fixable HIGH/CRITICAL findings, with SARIF upload and Actions summaries
 - a separate main-only publishing job that uploads an untagged multiarch candidate, tests and scans that exact digest, attests and signs it, then promotes release tags and updates Artifact Hub metadata
 - commit-pinned Actions with Renovate updates and no publishing credentials in PR validation
@@ -128,3 +128,7 @@ PLATFORM=linux/arm64 sh cloudnative-pg-timescaledb/upgrade-test.sh \
 ```
 
 That published image has a loader/package mismatch, so the fixture explicitly creates TimescaleDB 2.26.2. New images pin the loader with the extension. The fixture is not a substitute for restoring and testing application data.
+
+### Barman fixes
+
+[Barman 3.20.1](https://github.com/EnterpriseDB/barman/releases/tag/release/3.20.1) fixes CVE-2026-93853 (snapshot deletion trusting catalog identifiers), honors GCS emulator endpoints for multipart uploads, and fixes CloudNativePG WAL restores when complete and partial files coexist. Serial restore no longer requires a writable spool directory. The smoke test exercises complete/partial selection in either listing order, including compressed WAL, with cloud I/O mocked; it does not contact a real backup store. Existing Azure **snapshot** users outside the supplied base extras need `azure-mgmt-compute>=38.0`; that optional provider is not newly added to this image.

@@ -22,15 +22,26 @@ env:
   PG_MAJOR: "18"
 
 jobs:
-  build:
+  validate:
+    name: validate (${{ matrix.arch }})
     permissions:
       contents: read
       pull-requests: read
       security-events: write
     outputs:
       relevant: ${{ steps.changes.outputs.relevant }}
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - arch: arm64
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      PLATFORM: linux/${{ matrix.arch }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -48,18 +59,16 @@ jobs:
               - "artifacthub-repo.yml"
               - "renovate.json"
 
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
-
       - uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2
         with:
-          cache-key: cloudnative-pg-timescaledb/Dockerfile
+          cache-key: cloudnative-pg-timescaledb/${{ matrix.arch }}
 
-      - id: build-test
+      - id: image
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2
         with:
           context: ./cloudnative-pg-timescaledb
-          platforms: linux/amd64
+          platforms: ${{ env.PLATFORM }}
           pull: true
           no-cache: true
           load: true
@@ -67,46 +76,23 @@ jobs:
           build-args: |
             PG_MAJOR=${{ env.PG_MAJOR }}
 
-      - id: build-test-arm64
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
-        uses: useblacksmith/build-push-action@9b0579bbec7a6cad2f171596c57e7ac1e7658850 # v2
-        with:
-          context: ./cloudnative-pg-timescaledb
-          platforms: linux/arm64
-          pull: true
-          no-cache: true
-          load: true
-          tags: ${{ env.IMAGE_NAME }}:smoke-test-arm64
-          build-args: |
-            PG_MAJOR=${{ env.PG_MAJOR }}
-
-      - name: Smoke test both architectures
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+      - name: Smoke test
+        if: steps.image.outcome == 'success'
         run: |
           expected=$(sed -n 's/^ARG TIMESCALEDB_VERSION=//p' cloudnative-pg-timescaledb/Dockerfile)
-          for arch in amd64 arm64; do
-            tag=smoke-test
-            if [ "$arch" = arm64 ]; then tag=smoke-test-arm64; fi
-            docker run --rm -i --platform "linux/$arch" --entrypoint sh \
-              -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
-              "${IMAGE_NAME}:$tag" -s < cloudnative-pg-timescaledb/smoke-test.sh
-          done
+          docker run --rm -i --platform "$PLATFORM" --entrypoint sh \
+            -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
+            "${IMAGE_NAME}:smoke-test" -s < cloudnative-pg-timescaledb/smoke-test.sh
 
       - name: Rehearse the published image upgrade
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        if: steps.image.outcome == 'success'
         env:
           OLD_IMAGE: ghcr.io/inherent-design/cloudnative-pg-timescaledb@sha256:6de53e66e9c151e6395b09c3b2b43960abff760f169cd448c867ee0151cd745e
-        run: |
-          for arch in amd64 arm64; do
-            tag=smoke-test
-            if [ "$arch" = arm64 ]; then tag=smoke-test-arm64; fi
-            PLATFORM="linux/$arch" sh cloudnative-pg-timescaledb/upgrade-test.sh \
-              "$OLD_IMAGE" "${IMAGE_NAME}:$tag"
-          done
+        run: sh cloudnative-pg-timescaledb/upgrade-test.sh "$OLD_IMAGE" "${IMAGE_NAME}:smoke-test"
 
       - name: Scan image gate
         id: trivy_gate
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        if: always() && steps.image.outcome == 'success'
         continue-on-error: true
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -121,7 +107,7 @@ jobs:
 
       - name: Generate Trivy SARIF
         id: trivy_report
-        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        if: always() && steps.image.outcome == 'success'
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
@@ -137,88 +123,58 @@ jobs:
         if: always() && steps.trivy_report.outcome == 'success'
         with:
           sarif_file: trivy-results.sarif
-          category: container-amd64
-
-      - name: Scan arm64 image gate
-        id: trivy_gate_arm64
-        if: always() && steps.build-test-arm64.outcome == 'success'
-        continue-on-error: true
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
-          image-ref: ${{ env.IMAGE_NAME }}:smoke-test-arm64
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          scanners: vuln
-
-      - name: Generate arm64 Trivy SARIF
-        id: trivy_report_arm64
-        if: always() && steps.build-test-arm64.outcome == 'success'
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        with:
-          # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
-          image-ref: ${{ env.IMAGE_NAME }}:smoke-test-arm64
-          format: sarif
-          output: trivy-results-arm64.sarif
-          exit-code: "0"
-          ignore-unfixed: true
-          scanners: vuln
-
-      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
-        if: always() && steps.trivy_report_arm64.outcome == 'success'
-        with:
-          sarif_file: trivy-results-arm64.sarif
-          category: container-arm64
+          category: container-${{ matrix.arch }}
 
       - name: Validation summary
         if: always()
         env:
-          AMD64_BUILD: ${{ steps.build-test.outcome }}
-          ARM64_BUILD: ${{ steps.build-test-arm64.outcome }}
-          AMD64_SCAN: ${{ steps.trivy_gate.outcome }}
-          ARM64_SCAN: ${{ steps.trivy_gate_arm64.outcome }}
+          IMAGE_RESULT: ${{ steps.image.outcome }}
+          SCAN_RESULT: ${{ steps.trivy_gate.outcome }}
         run: |
           {
-            echo "## Validation Summary"
-            echo "- amd64 build / scan: $AMD64_BUILD / $AMD64_SCAN"
-            echo "- arm64 build / scan: $ARM64_BUILD / $ARM64_SCAN"
+            echo "## $PLATFORM validation"
+            echo "- Build: $IMAGE_RESULT"
+            echo "- Vulnerability gate: $SCAN_RESULT"
           } >> "$GITHUB_STEP_SUMMARY"
-          for arch in amd64 arm64; do
-            tag=smoke-test
-            if [ "$arch" = arm64 ]; then tag=smoke-test-arm64; fi
-            if docker image inspect "${IMAGE_NAME}:$tag" >/dev/null 2>&1; then
-              echo "### $arch installed packages" >> "$GITHUB_STEP_SUMMARY"
-              docker run --rm --platform "linux/$arch" --entrypoint dpkg-query \
-                "${IMAGE_NAME}:$tag" -W 'postgresql-18*' 'timescaledb*' >> "$GITHUB_STEP_SUMMARY"
-            fi
-          done
+          if [ "$IMAGE_RESULT" = success ]; then
+            docker run --rm --entrypoint dpkg-query "${IMAGE_NAME}:smoke-test" \
+              -W 'postgresql-18*' 'timescaledb*' >> "$GITHUB_STEP_SUMMARY"
+            docker run --rm --entrypoint barman-cloud-backup "${IMAGE_NAME}:smoke-test" \
+              --version >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Fail on Trivy findings
-        if: always() && (steps.trivy_gate.outcome == 'failure' || steps.trivy_gate_arm64.outcome == 'failure')
-        run: |
-          echo "Trivy detected HIGH/CRITICAL findings in the smoke-test image." >&2
-          exit 1
+        if: always() && steps.trivy_gate.outcome == 'failure'
+        run: exit 1
 
-  publish:
+  # Stable required-check name; fail if either native validation failed or was cancelled.
+  build:
+    needs: validate
+    if: always()
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 5
+    outputs:
+      relevant: ${{ needs.validate.outputs.relevant }}
+    steps:
+      - env:
+          VALIDATION_RESULT: ${{ needs.validate.result }}
+        run: test "$VALIDATION_RESULT" = success
+
+  candidate:
     needs: build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.build.outputs.relevant == 'true')
     permissions:
       contents: read
       packages: write
-      attestations: write
-      artifact-metadata: write
-      id-token: write
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 60
+    timeout-minutes: 45
+    outputs:
+      digest: ${{ steps.candidate.outputs.digest }}
+      tags: ${{ steps.meta.outputs.tags }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4
       - uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2
         with:
           cache-key: cloudnative-pg-timescaledb/publish
@@ -264,52 +220,79 @@ jobs:
           provenance: mode=max
           sbom: true
 
+  verify-candidate:
+    needs: candidate
+    name: verify release (${{ matrix.arch }})
+    permissions:
+      contents: read
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: blacksmith-4vcpu-ubuntu-2404
+          - arch: arm64
+            runner: blacksmith-4vcpu-ubuntu-2404-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    env:
+      CANDIDATE_IMAGE: ghcr.io/inherent-design/cloudnative-pg-timescaledb@${{ needs.candidate.outputs.digest }}
+      PLATFORM: linux/${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Validate the release digest
-        env:
-          CANDIDATE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.candidate.outputs.digest }}
         run: |
           expected=$(sed -n 's/^ARG TIMESCALEDB_VERSION=//p' cloudnative-pg-timescaledb/Dockerfile)
-          for arch in amd64 arm64; do
-            docker pull --platform "linux/$arch" "$CANDIDATE_IMAGE"
-            docker run --rm -i --platform "linux/$arch" --entrypoint sh \
-              -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
-              "$CANDIDATE_IMAGE" -s < cloudnative-pg-timescaledb/smoke-test.sh
-          done
-
-      - name: Scan release amd64
+          docker pull --platform "$PLATFORM" "$CANDIDATE_IMAGE"
+          docker run --rm -i --platform "$PLATFORM" --entrypoint sh \
+            -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
+            "$CANDIDATE_IMAGE" -s < cloudnative-pg-timescaledb/smoke-test.sh
+      - name: Scan release digest
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         env:
           TRIVY_IMAGE_SRC: remote
-          TRIVY_PLATFORM: linux/amd64
+          TRIVY_PLATFORM: ${{ env.PLATFORM }}
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.candidate.outputs.digest }}
+          image-ref: ${{ env.CANDIDATE_IMAGE }}
           format: table
           exit-code: "1"
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           scanners: vuln
 
-      - name: Scan release arm64
-        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
-        env:
-          TRIVY_IMAGE_SRC: remote
-          TRIVY_PLATFORM: linux/arm64
+  publish:
+    needs: [candidate, verify-candidate]
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      artifact-metadata: write
+      id-token: write
+    runs-on: blacksmith-2vcpu-ubuntu-2404
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
-          # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.candidate.outputs.digest }}
-          format: table
-          exit-code: "1"
-          severity: CRITICAL,HIGH
-          ignore-unfixed: true
-          scanners: vuln
-
+          persist-credentials: false
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.candidate.outputs.digest }}
+          subject-digest: ${{ needs.candidate.outputs.digest }}
           push-to-registry: true
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -319,13 +302,13 @@ jobs:
 
       - name: Sign image
         env:
-          CANDIDATE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.candidate.outputs.digest }}
+          CANDIDATE_IMAGE: ghcr.io/inherent-design/cloudnative-pg-timescaledb@${{ needs.candidate.outputs.digest }}
         run: cosign sign --yes "$CANDIDATE_IMAGE"
 
       - name: Promote the validated digest
         env:
-          CANDIDATE_IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.candidate.outputs.digest }}
-          RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
+          CANDIDATE_IMAGE: ghcr.io/inherent-design/cloudnative-pg-timescaledb@${{ needs.candidate.outputs.digest }}
+          RELEASE_TAGS: ${{ needs.candidate.outputs.tags }}
         run: |
           args=()
           while IFS= read -r tag; do
