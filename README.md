@@ -12,22 +12,21 @@ Container images for inherent.design infrastructure.
 
 Each directory contains a Dockerfile and README with image-specific documentation, usage examples, and version details.
 
-See the [maintenance plan](MAINTENANCE.md) for the September 2026 audit, upgrade decisions, validation results, and release blockers.
-
 ## Workflows
 
 | Workflow | Trigger | Schedule | Purpose |
 |---|---|---|---|
-| Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Workflow linting, image build, smoke test, Trivy scan, and publishing on main |
+| Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Native amd64/arm64 builds, runtime and upgrade tests, Trivy scans, and validated digest publication on main |
+| Validate Workflows | Pull requests to main, push to main | — | actionlint, ShellCheck, and shell syntax checks |
 | Renovate Auto Approve | Renovate pull_request events | — | Opt-in approval of eligible same-repository Renovate updates |
 | Security Scan | Weekly, manual dispatch | Wednesday 08:00 UTC | Trivy scan of both published architectures, upload SARIF to GitHub Security |
-| Cleanup | Weekly | Sunday 03:00 UTC | Prune untagged and old GHCR images, keep 10 most recent tagged |
+| Cleanup | Weekly, manual dispatch | Sunday 03:00 UTC | Prune old GHCR images, keep 10 most recent tagged; protect `latest`, `18`, and `artifacthub.io` |
 
 ## Dependency Management
 
-Renovate tracks base image tags and extension versions via regex custom managers.
+Renovate tracks the base image tag, TimescaleDB, Barman, and workflow tool versions. See the [image README](cloudnative-pg-timescaledb/README.md) for validation and database upgrade instructions.
 
-- Patch, minor, digest, and pin updates are eligible for Renovate-managed automerge after checks pass. Native platform automerge is disabled because this repository currently has no required-check rules.
+- Patch, minor, digest, and pin updates are eligible for Renovate-managed automerge after checks pass. Native platform automerge is disabled so Renovate waits for checks itself.
 - TimescaleDB minor updates require human migration review; they are not eligible for automerge.
 - Actions are pinned to commit SHAs, and Trivy, Cosign and ORAS binary versions are tracked explicitly.
 - Auto-approval is disabled unless the repository variable `RENOVATE_AUTO_APPROVE` is `true`. Before enabling it, configure required `build` and `actionlint` checks and allow Actions to approve PRs in repository settings.
