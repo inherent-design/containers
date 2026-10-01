@@ -12,13 +12,15 @@ Container images for inherent.design infrastructure.
 
 Each directory contains a Dockerfile and README with image-specific documentation, usage examples, and version details.
 
+See the [maintenance plan](MAINTENANCE.md) for the September 2026 audit, upgrade decisions, validation results, and release blockers.
+
 ## Workflows
 
 | Workflow | Trigger | Schedule | Purpose |
 |---|---|---|---|
 | Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Workflow linting, image build, smoke test, Trivy scan, and publishing on main |
 | Renovate Auto Approve | Renovate pull_request_target events | — | Auto-approve safe Renovate patch/minor/digest updates after policy checks |
-| Security Scan | Weekly | Wednesday 08:00 UTC | Trivy scan of published images, upload SARIF to GitHub Security |
+| Security Scan | Weekly, manual dispatch | Wednesday 08:00 UTC | Trivy scan of both published architectures, upload SARIF to GitHub Security |
 | Cleanup | Weekly | Sunday 03:00 UTC | Prune untagged and old GHCR images, keep 10 most recent tagged |
 
 ## Dependency Management

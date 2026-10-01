@@ -10,6 +10,8 @@ ghcr.io/inherent-design/cloudnative-pg-timescaledb
 
 The CNPG `system` base (Debian bookworm) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository.
 
+The upstream `system` tier is deprecated. It is retained here for existing clusters using `spec.backup.barmanObjectStore`. Migration to the `standard` tier requires the Barman Cloud plugin and a validated backup/restore migration; removing the bundled backup commands from the rolling `18` tag would break those clusters.
+
 ## Versions
 
 Exact version numbers are not maintained manually in this README.
@@ -27,7 +29,9 @@ Versions are managed by Renovate. The CNPG base tag and TimescaleDB target versi
 | `latest` | Most recent build from main |
 | `18` | Rolling latest for PostgreSQL 18 |
 | `18-YYYYMMDD` | Weekly scheduled rebuild |
-| `18-<sha>` | Git commit reference |
+| `18-<sha>` | Source reference; rebuilds of the same commit can replace this tag |
+
+Pin production deployments to a tested image digest. Rolling tags and source tags are mutable because upstream images and OS packages receive updates.
 
 ## Usage
 
@@ -43,14 +47,14 @@ spec:
   imageName: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
 
   postgresql:
-    parameters:
-      shared_preload_libraries: timescaledb
+    shared_preload_libraries:
+      - timescaledb
 
   bootstrap:
     initdb:
       database: app
       owner: app
-      postInitSQL:
+      postInitApplicationSQL:
         - "CREATE EXTENSION IF NOT EXISTS timescaledb;"
         - "CREATE EXTENSION IF NOT EXISTS vector;"
 
@@ -58,19 +62,20 @@ spec:
     size: 50Gi
 ```
 
-### Docker (local development)
+### Docker validation
+
+CNPG operand images do not provide the Docker Official Image initialization entrypoint or process `POSTGRES_PASSWORD`. Use the disposable runtime test for local validation:
 
 ```bash
-docker run -d \
-  -e POSTGRES_PASSWORD=dev \
-  -p 5432:5432 \
+# From the repository root; initializes temporary data without exposing a port.
+docker run --rm -i --entrypoint sh \
   ghcr.io/inherent-design/cloudnative-pg-timescaledb:18 \
-  -c shared_preload_libraries=timescaledb
+  -s < cloudnative-pg-timescaledb/smoke-test.sh
 ```
 
 ## Dockerfile
 
-Starts from the CNPG system base, switches to root to install TimescaleDB from the official Timescale apt repository, then drops back to UID 26 (the postgres user in CNPG images). `PG_MAJOR` and `TIMESCALEDB_VERSION` build args are tracked by Renovate for automated version bumps, and the Dockerfile now fails if the requested TimescaleDB version is not available in the apt repository.
+Starts from the CNPG system base, refreshes inherited OS packages, installs TimescaleDB and its loader at the same exact package version, then drops back to UID 26 (the postgres user in CNPG images). Renovate tracks `CNPG_TAG` and `TIMESCALEDB_VERSION`; `PG_MAJOR` stays at 18. The build fails if either requested package version is unavailable.
 
 ## Build
 
@@ -79,7 +84,32 @@ Images are validated on pull requests to `main`, published on push to `main`, an
 The build includes:
 
 - workflow linting with `actionlint`
-- a single-platform smoke-test image build
-- validation of TimescaleDB, pgVector, PGAudit, and the Barman toolchain
-- Trivy scanning with SARIF upload and Actions summaries
+- fresh base resolution, with uncached package installation for scheduled/manual builds
+- amd64 and arm64 image builds and PostgreSQL startup tests
+- SQL checks for TimescaleDB hypertables, pgVector, and PGAudit, plus execution of all five Barman commands
+- Trivy scanning of both architectures, blocking fixable HIGH/CRITICAL findings, with SARIF upload and Actions summaries
 - multi-arch publish, attestation, signing, and Artifact Hub metadata push on `main`
+
+Manual dispatch on other branches validates images but cannot publish stable tags.
+
+## Upgrading existing databases
+
+Replacing the image updates binaries; it does not update installed SQL extensions. Before rollout, record each database's `pg_extension` versions and rehearse on a restored backup. After installing the new image, use a fresh `psql -X` session in each database that has TimescaleDB, with no preceding query that loads the old extension:
+
+```sql
+ALTER EXTENSION timescaledb UPDATE;
+```
+
+Update `vector` and `pgaudit` in databases where they are installed, then validate application queries, compressed chunks, continuous aggregates, WAL archiving and restore. An image rollback alone is not a database rollback after extension catalog migrations; retain a tested pre-upgrade backup.
+
+The [TimescaleDB 2.27 upgrade notes](https://github.com/timescale/timescaledb/releases/tag/2.27.0) identify blocked upgrades involving bloom sparse indexes on compressed `int2` columns and a metadata migration for 2.26 composite bloom filters. Inspect these before upgrading from 2.26. The [2.29 release](https://github.com/timescale/timescaledb/releases/tag/2.29.0) drops PostgreSQL 15 support; this image remains PostgreSQL 18. The [2.30.2 release](https://github.com/timescale/timescaledb/releases/tag/2.30.2) renames granular refresh settings to `timescaledb.cagg_granular_refresh_*`; review custom settings.
+
+The upgrade fixture checks compressed data and a continuous aggregate from 2.26.2 using an isolated Docker volume:
+
+```sh
+PLATFORM=linux/arm64 sh cloudnative-pg-timescaledb/upgrade-test.sh \
+  ghcr.io/inherent-design/cloudnative-pg-timescaledb@sha256:6de53e66e9c151e6395b09c3b2b43960abff760f169cd448c867ee0151cd745e \
+  containers-refresh:arm64
+```
+
+That published image has a loader/package mismatch, so the fixture explicitly creates TimescaleDB 2.26.2. New images pin the loader with the extension. The fixture is not a substitute for restoring and testing application data.
