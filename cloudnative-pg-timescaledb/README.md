@@ -8,7 +8,7 @@ CloudNativePG PostgreSQL image with TimescaleDB, pgVector, and PGAudit.
 ghcr.io/inherent-design/cloudnative-pg-timescaledb
 ```
 
-The CNPG `system` base (Debian bookworm) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository.
+The CNPG `system` base (Debian Trixie) includes pgVector, PGAudit, and the Barman backup toolchain. This image adds TimescaleDB from the official Timescale apt repository.
 
 The upstream `system` tier is deprecated. It is retained here for existing clusters using `spec.backup.barmanObjectStore`. Migration to the `standard` tier requires the Barman Cloud plugin and a validated backup/restore migration; removing the bundled backup commands from the rolling `18` tag would break those clusters.
 
@@ -29,6 +29,7 @@ Versions are managed by Renovate. The CNPG base tag and TimescaleDB target versi
 | `latest` | Most recent build from main |
 | `18` | Rolling latest for PostgreSQL 18 |
 | `18-YYYYMMDD` | Weekly scheduled rebuild |
+| `18-build-<run>-<attempt>` | Unique build reference; also pin its digest |
 | `18-<sha>` | Source reference; rebuilds of the same commit can replace this tag |
 
 Pin production deployments to a tested image digest. Rolling tags and source tags are mutable because upstream images and OS packages receive updates.
@@ -84,13 +85,14 @@ Images are validated on pull requests to `main`, published on push to `main`, an
 The build includes:
 
 - workflow linting with `actionlint`
-- fresh base resolution, with uncached package installation for scheduled/manual builds
+- fresh base resolution and uncached package installation on every build
 - amd64 and arm64 image builds and PostgreSQL startup tests
 - SQL checks for TimescaleDB hypertables, pgVector, and PGAudit, plus execution of all five Barman commands
 - Trivy scanning of both architectures, blocking fixable HIGH/CRITICAL findings, with SARIF upload and Actions summaries
-- multi-arch publish, attestation, signing, and Artifact Hub metadata push on `main`
+- a separate main-only publishing job that uploads an untagged multiarch candidate, tests and scans that exact digest, attests and signs it, then promotes release tags and updates Artifact Hub metadata
+- commit-pinned Actions with Renovate updates and no publishing credentials in PR validation
 
-Manual dispatch on other branches validates images but cannot publish stable tags.
+Manual dispatch on other branches validates images but cannot publish stable tags. Upgrade fixtures also run on both architectures in CI. Published candidates are scanned again because a later rebuild can resolve different upstream packages.
 
 ## Upgrading existing databases
 
@@ -104,12 +106,25 @@ Update `vector` and `pgaudit` in databases where they are installed, then valida
 
 The [TimescaleDB 2.27 upgrade notes](https://github.com/timescale/timescaledb/releases/tag/2.27.0) identify blocked upgrades involving bloom sparse indexes on compressed `int2` columns and a metadata migration for 2.26 composite bloom filters. Inspect these before upgrading from 2.26. The [2.29 release](https://github.com/timescale/timescaledb/releases/tag/2.29.0) drops PostgreSQL 15 support; this image remains PostgreSQL 18. The [2.30.2 release](https://github.com/timescale/timescaledb/releases/tag/2.30.2) renames granular refresh settings to `timescaledb.cagg_granular_refresh_*`; review custom settings.
 
-The upgrade fixture checks compressed data and a continuous aggregate from 2.26.2 using an isolated Docker volume:
+### Bookworm to Trixie
+
+This update changes the OS from Debian 12 to Debian 13. The fixture observes glibc collation versions changing from 2.36 to 2.41. Before resuming application traffic, rebuild objects affected by changed libc or ICU sort rules, then refresh their recorded collation versions. Refreshing the version alone does not repair indexes. See [PostgreSQL collation guidance](https://www.postgresql.org/docs/18/sql-altercollation.html).
+
+For the fixture database, the sequence after the extension updates is:
+
+```sql
+REINDEX DATABASE postgres;
+ALTER DATABASE postgres REFRESH COLLATION VERSION;
+```
+
+Inventory every application database and explicitly used collation in production; adapt names, reindex affected objects and refresh explicit collations as needed. Do not run these maintenance commands before `ALTER EXTENSION timescaledb UPDATE` in the same session: doing so loads the old TimescaleDB version and prevents its update. The fixture checks this order with an English UTF-8 database and indexed non-ASCII text.
+
+The upgrade fixture checks compressed data, a continuous aggregate and collation maintenance from the published 2.26.2 image using an isolated Docker volume:
 
 ```sh
 PLATFORM=linux/arm64 sh cloudnative-pg-timescaledb/upgrade-test.sh \
   ghcr.io/inherent-design/cloudnative-pg-timescaledb@sha256:6de53e66e9c151e6395b09c3b2b43960abff760f169cd448c867ee0151cd745e \
-  containers-refresh:arm64
+  containers-refresh:trixie-arm64
 ```
 
 That published image has a loader/package mismatch, so the fixture explicitly creates TimescaleDB 2.26.2. New images pin the loader with the extension. The fixture is not a substitute for restoring and testing application data.

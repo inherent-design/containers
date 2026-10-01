@@ -13,9 +13,10 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
-      - uses: dataaxiom/ghcr-cleanup-action@v1
+      - uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f # v1
         with:
           package: cloudnative-pg-timescaledb
+          exclude-tags: latest,18,artifacthub.io
           delete-untagged: true
           delete-ghost-images: true
           delete-partial-images: true

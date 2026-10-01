@@ -22,7 +22,7 @@ jobs:
     steps:
       - id: trivy_gate
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
@@ -34,7 +34,7 @@ jobs:
           scanners: vuln
 
       - id: trivy_report
-        uses: aquasecurity/trivy-action@0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
           version: v0.74.0
@@ -45,7 +45,7 @@ jobs:
           ignore-unfixed: true
           scanners: vuln
 
-      - uses: github/codeql-action/upload-sarif@v4
+      - uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4
         if: always() && steps.trivy_report.outcome == 'success'
         with:
           sarif_file: trivy-results.sarif
