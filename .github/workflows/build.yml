@@ -95,7 +95,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: table
           exit-code: "1"
@@ -109,7 +109,7 @@ jobs:
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
+          version: v0.75.0
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: sarif
           output: trivy-results.sarif
@@ -260,7 +260,7 @@ jobs:
           TRIVY_PLATFORM: ${{ env.PLATFORM }}
         with:
           # renovate: datasource=github-releases depName=aquasecurity/trivy
-          version: v0.74.0
+          version: v0.75.0
           image-ref: ${{ env.CANDIDATE_IMAGE }}
           format: table
           exit-code: "1"
