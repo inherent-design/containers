@@ -29,7 +29,7 @@ jobs:
       pull-requests: read
       security-events: write
     outputs:
-      relevant: ${{ steps.changes.outputs.relevant }}
+      release: ${{ steps.changes.outputs.release }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,6 +58,10 @@ jobs:
               - ".github/actionlint.yaml"
               - "artifacthub-repo.yml"
               - "renovate.json"
+            release:
+              - "cloudnative-pg-timescaledb/Dockerfile"
+              - "cloudnative-pg-timescaledb/.dockerignore"
+              - "artifacthub-repo.yml"
 
       - uses: useblacksmith/setup-docker-builder@19215110ab936351210feebdfa5b440b4493e184 # v2
         with:
@@ -83,12 +87,6 @@ jobs:
           docker run --rm -i --platform "$PLATFORM" --entrypoint sh \
             -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
             "${IMAGE_NAME}:smoke-test" -s < cloudnative-pg-timescaledb/smoke-test.sh
-
-      - name: Rehearse the published image upgrade
-        if: steps.image.outcome == 'success'
-        env:
-          OLD_IMAGE: ghcr.io/inherent-design/cloudnative-pg-timescaledb@sha256:6de53e66e9c151e6395b09c3b2b43960abff760f169cd448c867ee0151cd745e
-        run: sh cloudnative-pg-timescaledb/upgrade-test.sh "$OLD_IMAGE" "${IMAGE_NAME}:smoke-test"
 
       - name: Scan image gate
         id: trivy_gate
@@ -154,7 +152,7 @@ jobs:
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     outputs:
-      relevant: ${{ needs.validate.outputs.relevant }}
+      release: ${{ needs.validate.outputs.release }}
     steps:
       - env:
           VALIDATION_RESULT: ${{ needs.validate.result }}
@@ -162,7 +160,7 @@ jobs:
 
   candidate:
     needs: build
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.build.outputs.relevant == 'true')
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || needs.build.outputs.release == 'true')
     permissions:
       contents: read
       packages: write

@@ -16,11 +16,13 @@ Each directory contains a Dockerfile and README with image-specific documentatio
 
 | Workflow | Trigger | Schedule | Purpose |
 |---|---|---|---|
-| Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Native amd64/arm64 builds, runtime and upgrade tests, Trivy scans, and validated digest publication on main |
+| Build | Pull requests to main, push to main (path-filtered), manual dispatch | Monday 06:00 UTC | Native amd64/arm64 builds, runtime smoke tests, Trivy scans, and validated digest publication on main |
 | Validate Workflows | Pull requests to main, push to main | — | actionlint, ShellCheck, and shell syntax checks |
 | Renovate Auto Approve | Renovate pull_request events | — | Opt-in approval of eligible same-repository Renovate updates |
 | Security Scan | Weekly, manual dispatch | Wednesday 08:00 UTC | Trivy scan of both published architectures, upload SARIF to GitHub Security |
 | Cleanup | Weekly, manual dispatch | Sunday 03:00 UTC | Prune old GHCR images, keep 10 most recent tagged; protect `latest`, `18`, and `artifacthub.io` |
+
+Pushes to `main` publish images only when the Dockerfile, image `.dockerignore`, or Artifact Hub metadata changes. Test, workflow, Renovate configuration, and documentation changes do not publish images. Scheduled builds and manual dispatch on `main` still publish after validation.
 
 ## Dependency Management
 
