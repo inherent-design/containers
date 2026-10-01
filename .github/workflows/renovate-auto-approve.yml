@@ -1,7 +1,7 @@
 name: Renovate Auto Approve
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - reopened
@@ -15,11 +15,12 @@ permissions:
 
 jobs:
   auto-approve:
-    if: github.event.pull_request.user.login == 'renovate[bot]'
+    # Enable only after configuring required checks and Actions approval permissions.
+    if: vars.RENOVATE_AUTO_APPROVE == 'true' && github.event.pull_request.user.login == 'renovate[bot]' && github.event.pull_request.head.repo.full_name == github.repository
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 10
     steps:
-      - uses: actions/github-script@v9
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
         with:
           script: |
             const pr = context.payload.pull_request;
@@ -46,7 +47,7 @@ jobs:
             });
 
             const alreadyApproved = reviews.some(
-              (review) => review.user?.login === 'github-actions[bot]' && review.state === 'APPROVED'
+              (review) => review.user?.login === 'github-actions[bot]' && review.state === 'APPROVED' && review.commit_id === pr.head.sha
             );
 
             if (alreadyApproved) {
@@ -57,6 +58,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               pull_number: pr.number,
+              commit_id: pr.head.sha,
               event: 'APPROVE',
               body: 'Approving safe Renovate update after automated policy checks.',
             });
