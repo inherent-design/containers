@@ -1,6 +1,6 @@
 # Containers maintenance plan
 
-Investigated on September 30, 2026, from `20b3ea2a3e2d2bb77d109000f2c35b930cfc5286`. The PostgreSQL 18 refresh is implemented on `maintenance/container-refresh`. The follow-up moves to Debian Trixie while retaining the system tier and Barman compatibility. Both architectures now pass the fixable HIGH/CRITICAL gate. GitHub PR validation and Greptile review are the next checks; production rollout still requires database and collation maintenance.
+Investigated on September 30, 2026, from `20b3ea2a3e2d2bb77d109000f2c35b930cfc5286`. The PostgreSQL 18 refresh is implemented on `maintenance/container-refresh`. The follow-up moves to Debian Trixie while retaining the system tier and Barman compatibility. Both architectures now pass the fixable HIGH/CRITICAL gate. [PR #21](https://github.com/inherent-design/containers/pull/21) is open and Greptile review was explicitly requested. Hosted workflow linting passed; the first build exposed unavailable arm64 runtime emulation, so runtime validation now uses native Blacksmith architecture runners. Final hosted checks remain pending; production rollout still requires database and collation maintenance.
 
 ## Repository and conventions
 
@@ -31,13 +31,14 @@ The [Renovate approval run](https://github.com/inherent-design/containers/action
 
 ## Implemented changes
 
-- Update PG to 18.6, TimescaleDB to 2.30.2 and Debian to Trixie; refresh inherited OS packages. Retain the system tier for existing Barman consumers.
+- Update PG to 18.6, TimescaleDB to 2.30.2, Barman to 3.20.1 and Debian to Trixie; refresh inherited OS packages. Retain the system tier for existing Barman consumers.
+- Explicitly update Barman with upstream cloud-provider extras and run `pip check`. Barman 3.20.1 fixes CVE-2026-93853 and the CNPG complete/partial WAL restore bug. The latter is reproduced against 3.20.0 and tested against the new image without cloud credentials; scan databases alone did not identify this gap.
 - Pin the TimescaleDB loader and extension to the same package version. The published image's default `CREATE EXTENSION timescaledb` fails because its loader advertises 2.26.4 while its extension package is 2.26.2. The previous smoke test missed this because it only checked files.
 - Match requested package versions literally and fail if unavailable.
 - Execute PostgreSQL startup, extension creation, hypertable queries, vector operations and Barman commands on both architectures. Add a disposable 2.26.2 upgrade fixture with compressed data and a continuous aggregate.
 - Scan both architectures before publication and in weekly scans. Keep the fixable HIGH/CRITICAL gate. Upload SARIF only after report generation succeeds.
 - Pin direct Actions to verified commit SHAs, supply Blacksmith v2's required cache key, resolve fresh bases and refresh package installation on every build. Update Cosign to 3.1.3 and ORAS to 1.3.4 rather than retaining older installer defaults; both are tracked by Renovate. Their upstream releases fix signature-verification and registry-credential-scoping issues respectively.
-- Restrict publication and registry login to a main-only job. PR validation has no package/OIDC publishing permissions. Upload a candidate without release tags, test and scan its exact digest on both architectures, attest and sign it, then promote stable tags. Add a unique run/attempt tag; preserve latest, 18 and Artifact Hub tags during cleanup.
+- Restrict publication and registry login to a main-only job. PR validation has no package/OIDC publishing permissions and uses a native amd64/arm64 matrix. A stable `build` check aggregates both results. Upload a candidate without release tags, test and scan its exact digest on both architectures, attest and sign it, then promote stable tags after separate native release-candidate checks. Add a unique run/attempt tag; preserve latest, 18 and Artifact Hub tags during cleanup.
 - Correct CNPG's preload field type and initialize extensions in the application database. Replace the unsupported Docker entrypoint example. Document mutable tags, digest pinning and extension migrations.
 
 ## API and operational changes
