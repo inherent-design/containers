@@ -8,14 +8,10 @@ on:
   schedule:
     - cron: "0 6 * * 1"
   workflow_dispatch:
-    inputs:
-      force_push:
-        description: "Push images even on non-main builds"
-        type: boolean
-        default: false
 
 permissions:
   contents: read
+  pull-requests: read
   packages: write
   security-events: write
   attestations: write
@@ -34,13 +30,13 @@ env:
 jobs:
   build:
     runs-on: blacksmith-4vcpu-ubuntu-2404
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - id: changes
         if: github.event_name == 'push' || github.event_name == 'pull_request'
-        uses: dorny/paths-filter@v3
+        uses: dorny/paths-filter@v4
         with:
           filters: |
             relevant:
@@ -52,9 +48,12 @@ jobs:
 
       - uses: docker/setup-qemu-action@v4
 
-      - uses: useblacksmith/setup-docker-builder@v1
+      - uses: useblacksmith/setup-docker-builder@v2
+        with:
+          cache-key: cloudnative-pg-timescaledb/Dockerfile
 
       - uses: docker/login-action@v4
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -86,38 +85,46 @@ jobs:
         with:
           context: ./cloudnative-pg-timescaledb
           platforms: linux/amd64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
           load: true
           tags: ${{ env.IMAGE_NAME }}:smoke-test
           build-args: |
             PG_MAJOR=${{ env.PG_MAJOR }}
 
-      - name: Smoke test
+      - id: build-test-arm64
+        if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
+        uses: useblacksmith/build-push-action@v2
+        with:
+          context: ./cloudnative-pg-timescaledb
+          platforms: linux/arm64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+          load: true
+          tags: ${{ env.IMAGE_NAME }}:smoke-test-arm64
+          build-args: |
+            PG_MAJOR=${{ env.PG_MAJOR }}
+
+      - name: Smoke test both architectures
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         run: |
-          docker run --rm --entrypoint sh ${{ env.IMAGE_NAME }}:smoke-test -c '
-            PG=18
-            SO=$(find /usr/lib/postgresql/$PG/lib -name "timescaledb-*.so" | head -1)
-            if [ -z "$SO" ]; then echo "FAIL: timescaledb .so not found"; exit 1; fi
-            echo "Found: $SO"
-            for ext in timescaledb vector; do
-              CTRL="/usr/share/postgresql/$PG/extension/${ext}.control"
-              if [ ! -f "$CTRL" ]; then echo "FAIL: $CTRL not found"; exit 1; fi
-              VER=$(grep default_version "$CTRL" | cut -d= -f2 | tr -d " '"'"'")
-              echo "Found: $ext $VER"
-            done
-            for bin in barman-cloud-backup barman-cloud-wal-archive barman-cloud-check-wal-archive barman-cloud-wal-restore barman-cloud-restore; do
-              if ! command -v "$bin" >/dev/null 2>&1; then echo "FAIL: $bin not found"; exit 1; fi
-              echo "Found: $bin"
-            done
-            echo "All extensions and backup tools validated"
-          '
+          expected=$(sed -n 's/^ARG TIMESCALEDB_VERSION=//p' cloudnative-pg-timescaledb/Dockerfile)
+          for arch in amd64 arm64; do
+            tag=smoke-test
+            if [ "$arch" = arm64 ]; then tag=smoke-test-arm64; fi
+            docker run --rm -i --platform "linux/$arch" --entrypoint sh \
+              -e PG_MAJOR -e TIMESCALEDB_VERSION="$expected" \
+              "${IMAGE_NAME}:$tag" -s < cloudnative-pg-timescaledb/smoke-test.sh
+          done
 
       - name: Scan image gate
         id: trivy_gate
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: table
           exit-code: "1"
@@ -128,8 +135,10 @@ jobs:
       - name: Generate Trivy SARIF
         id: trivy_report
         if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true'
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
           image-ref: ${{ env.IMAGE_NAME }}:smoke-test
           format: sarif
           output: trivy-results.sarif
@@ -138,14 +147,51 @@ jobs:
           scanners: vuln
 
       - uses: github/codeql-action/upload-sarif@v4
-        if: always() && steps.trivy_report.conclusion != 'skipped'
+        if: always() && steps.trivy_report.outcome == 'success'
         with:
           sarif_file: trivy-results.sarif
+          category: container-amd64
+
+      - name: Scan arm64 image gate
+        id: trivy_gate_arm64
+        if: always() && steps.build-test-arm64.outcome == 'success'
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
+          image-ref: ${{ env.IMAGE_NAME }}:smoke-test-arm64
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          scanners: vuln
+
+      - name: Generate arm64 Trivy SARIF
+        id: trivy_report_arm64
+        if: always() && steps.build-test-arm64.outcome == 'success'
+        uses: aquasecurity/trivy-action@0.36.0
+        with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
+          image-ref: ${{ env.IMAGE_NAME }}:smoke-test-arm64
+          format: sarif
+          output: trivy-results-arm64.sarif
+          exit-code: "0"
+          ignore-unfixed: true
+          scanners: vuln
+
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always() && steps.trivy_report_arm64.outcome == 'success'
+        with:
+          sarif_file: trivy-results-arm64.sarif
+          category: container-arm64
 
       - name: Validation summary
         if: always()
         env:
           BUILD_TEST_OUTCOME: ${{ steps.build-test.outcome }}
+          TRIVY_ARM64_OUTCOME: ${{ steps.trivy_gate_arm64.outcome }}
           TRIVY_GATE_OUTCOME: ${{ steps.trivy_gate.outcome }}
           TRIVY_REPORT_OUTCOME: ${{ steps.trivy_report.outcome }}
           RELEVANT_CHANGES: ${{ steps.changes.outputs.relevant }}
@@ -160,6 +206,7 @@ jobs:
             echo "- Requested CNPG base tag: \`${CNPG_TAG}\`"
             echo "- Requested TimescaleDB version: \`${REQUESTED_TS}\`"
             echo "- Relevant changes detected: \`${RELEVANT_CHANGES:-true}\`"
+            echo "- ARM64 Trivy gate: \`${TRIVY_ARM64_OUTCOME}\`"
             echo "- Smoke image build: \`${BUILD_TEST_OUTCOME}\`"
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -214,14 +261,14 @@ jobs:
           fi
 
       - name: Fail on Trivy findings
-        if: always() && steps.trivy_gate.outcome == 'failure'
+        if: always() && (steps.trivy_gate.outcome == 'failure' || steps.trivy_gate_arm64.outcome == 'failure')
         run: |
           echo "Trivy detected HIGH/CRITICAL findings in the smoke-test image." >&2
           exit 1
 
       - id: push
         uses: useblacksmith/build-push-action@v2
-        if: (github.ref == 'refs/heads/main' || github.event.inputs.force_push == 'true') && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true')
+        if: (github.ref == 'refs/heads/main' && github.event_name != 'pull_request') && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || steps.changes.outputs.relevant == 'true')
         with:
           context: ./cloudnative-pg-timescaledb
           platforms: linux/amd64,linux/arm64
@@ -240,7 +287,7 @@ jobs:
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
 
-      - uses: sigstore/cosign-installer@v4.1.1
+      - uses: sigstore/cosign-installer@v4.1.2
         if: steps.push.outcome == 'success'
 
       - name: Sign image

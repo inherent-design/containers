@@ -6,17 +6,26 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   security-events: write
 
 jobs:
   scan:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+    env:
+      TRIVY_PLATFORM: linux/${{ matrix.arch }}
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
       - id: trivy_gate
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: table
           exit-code: "1"
@@ -25,8 +34,10 @@ jobs:
           scanners: vuln
 
       - id: trivy_report
-        uses: aquasecurity/trivy-action@0.35.0
+        uses: aquasecurity/trivy-action@0.36.0
         with:
+          # renovate: datasource=github-releases depName=aquasecurity/trivy
+          version: v0.74.0
           image-ref: ghcr.io/inherent-design/cloudnative-pg-timescaledb:18
           format: sarif
           output: trivy-results.sarif
@@ -35,13 +46,15 @@ jobs:
           scanners: vuln
 
       - uses: github/codeql-action/upload-sarif@v4
-        if: always() && steps.trivy_report.conclusion != 'skipped'
+        if: always() && steps.trivy_report.outcome == 'success'
         with:
           sarif_file: trivy-results.sarif
+          category: container-${{ matrix.arch }}
 
       - name: Security summary
         if: always()
         env:
+          SCAN_PLATFORM: linux/${{ matrix.arch }}
           TRIVY_GATE_OUTCOME: ${{ steps.trivy_gate.outcome }}
           TRIVY_REPORT_OUTCOME: ${{ steps.trivy_report.outcome }}
         run: |
@@ -49,6 +62,7 @@ jobs:
 
           {
             echo "## Security Scan Summary"
+            echo "- Platform: \`${SCAN_PLATFORM}\`"
             echo "- Image: \`ghcr.io/inherent-design/cloudnative-pg-timescaledb:18\`"
             echo "- Trivy gate status: \`${TRIVY_GATE_OUTCOME}\`"
             echo "- Trivy SARIF status: \`${TRIVY_REPORT_OUTCOME}\`"

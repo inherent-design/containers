@@ -10,6 +10,14 @@
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\nARG \\w+=(?<currentValue>.*)"
       ],
       "versioningTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": [".github/workflows/*.yml"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[^ ]+) depName=(?<depName>[^\\n]+)\\n\\s+version: (?<currentValue>[^\\s]+)"
+      ],
+      "versioningTemplate": "semver"
     }
   ],
   "packageRules": [
