@@ -323,7 +323,7 @@ jobs:
       - uses: oras-project/setup-oras@005458ad77f1c8facd38a094e4af2e69e5607ff4 # v2
         with:
           # renovate: datasource=github-releases depName=oras-project/oras
-          version: 1.3.4
+          version: 1.3.5
 
       - name: Push Artifact Hub metadata
         run: |
