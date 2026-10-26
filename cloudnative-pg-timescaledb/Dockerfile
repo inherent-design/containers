@@ -4,7 +4,7 @@ ARG CNPG_TAG=18.6-system-trixie
 FROM ghcr.io/cloudnative-pg/postgresql:${CNPG_TAG}
 
 # renovate: datasource=github-releases depName=timescale/timescaledb
-ARG TIMESCALEDB_VERSION=2.30.2
+ARG TIMESCALEDB_VERSION=2.31.0
 ARG PG_MAJOR=18
 
 # renovate: datasource=pypi depName=barman
