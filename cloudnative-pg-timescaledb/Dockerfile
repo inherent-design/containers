@@ -8,7 +8,7 @@ ARG TIMESCALEDB_VERSION=2.30.2
 ARG PG_MAJOR=18
 
 # renovate: datasource=pypi depName=barman
-ARG BARMAN_VERSION=3.20.1
+ARG BARMAN_VERSION=3.21.0
 
 USER root
 
