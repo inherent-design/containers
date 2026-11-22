@@ -193,6 +193,8 @@ jobs:
             type=schedule,pattern=${{ env.PG_MAJOR }}-{{date 'YYYYMMDD'}}
             type=sha,prefix=${{ env.PG_MAJOR }}-
           labels: |
+            org.opencontainers.image.authors=inherent.design contributors
+            org.opencontainers.image.licenses=Apache-2.0
             io.artifacthub.package.readme-url=https://raw.githubusercontent.com/inherent-design/containers/main/cloudnative-pg-timescaledb/README.md
             io.artifacthub.package.logo-url=https://raw.githubusercontent.com/inherent-design/containers/main/cloudnative-pg-timescaledb/icon.png
             io.artifacthub.package.license=Apache-2.0

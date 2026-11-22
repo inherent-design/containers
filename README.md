@@ -37,4 +37,4 @@ Renovate tracks the base image tag, TimescaleDB, Barman, and workflow tool versi
 
 ## License
 
-Apache 2.0
+Original container recipes and repository tooling are licensed under [Apache-2.0](LICENSE), copyright 2022–2026 inherent.design contributors. Base images, PostgreSQL, TimescaleDB, and other included software retain their own licenses.
